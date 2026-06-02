@@ -18,22 +18,24 @@ class DecoderUpsample(nn.Module):
 
 
 class MonocularDepthNet(nn.Module):
-    def __init__(self, swin_version='swin_large_patch4_window7_224', C=192, pretrained=True):
+    def __init__(self, swin_version='swin_tiny_patch4_window7_224', pretrained=True):
         super().__init__()
-        self.C = C
         self.encoder = timm.create_model(swin_version, pretrained=pretrained, features_only=True)
         self.encoder.patch_embed.strict_img_size = False
         self.swin_stride = 224
 
-        self.up4 = DecoderUpsample(8 * C, 4 * C)
-        self.up3 = DecoderUpsample(4 * C, 2 * C)
-        self.up2 = DecoderUpsample(2 * C, C)
+        chs = self.encoder.feature_info.channels()
+        _, C1, C2, C3 = chs
 
-        self.hafm3 = HAFM(4 * C)
-        self.hafm2 = HAFM(2 * C)
-        self.hafm1 = HAFM(C)
+        self.up4 = DecoderUpsample(C3, C2)
+        self.up3 = DecoderUpsample(C2, C1)
+        self.up2 = DecoderUpsample(C1, chs[0])
 
-        self.dprm = DPRM(channels=[4 * C, 2 * C, C])
+        self.hafm3 = HAFM(C2)
+        self.hafm2 = HAFM(C1)
+        self.hafm1 = HAFM(chs[0])
+
+        self.dprm = DPRM(channels=[C2, C1, chs[0]])
 
     def _pad_to_swin(self, x):
         H, W = x.shape[2], x.shape[3]
@@ -45,6 +47,11 @@ class MonocularDepthNet(nn.Module):
         pad_h = pH - H
         pad_w = pW - W
         return F.pad(x, (0, pad_w, 0, pad_h)), H, W
+
+    def enable_grad_checkpointing(self):
+        for module in self.encoder.modules():
+            if hasattr(module, 'grad_checkpointing'):
+                module.grad_checkpointing = True
 
     def forward(self, x):
         x, H, W = self._pad_to_swin(x)

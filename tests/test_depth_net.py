@@ -15,7 +15,7 @@ def test_decoder_upsample():
 
 @pytest.mark.slow
 def test_depth_net_forward():
-    model = MonocularDepthNet(swin_version='swin_large_patch4_window7_224', C=192, pretrained=False)
+    model = MonocularDepthNet(swin_version='swin_large_patch4_window7_224', pretrained=False)
     model.eval()
     B, H, W = 2, 224, 224
     x = torch.randn(B, 3, H, W)
@@ -28,7 +28,7 @@ def test_depth_net_forward():
 
 @pytest.mark.slow
 def test_depth_net_gradients():
-    model = MonocularDepthNet(swin_version='swin_large_patch4_window7_224', C=192, pretrained=False)
+    model = MonocularDepthNet(swin_version='swin_large_patch4_window7_224', pretrained=False)
     model.train()
     B, H, W = 2, 128, 128
     x = torch.randn(B, 3, H, W)
