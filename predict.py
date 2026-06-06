@@ -37,6 +37,22 @@ def save_depth_map(depth_tensor, output_path, colormap=True):
     depth_img.save(output_path)
 
 
+BACKBONE_MAP = {
+    96: 'swin_tiny_patch4_window7_224',
+    128: 'swin_base_patch4_window7_224',
+    192: 'swin_large_patch4_window7_224',
+}
+
+
+def detect_backbone(checkpoint_path):
+    state = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+    pe_weight = state.get('encoder.patch_embed.proj.weight')
+    if pe_weight is not None:
+        embed_dim = pe_weight.shape[0]
+        return BACKBONE_MAP.get(embed_dim, None)
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('image_path', type=str, help='Path to input image')
@@ -50,9 +66,15 @@ def main():
     device = torch.device(args.device if args.device else ('cuda' if torch.cuda.is_available() else 'cpu'))
     output_path = Path(args.output or f'depth_{Path(args.image_path).stem}.png')
 
+    if args.checkpoint:
+        detected = detect_backbone(args.checkpoint)
+        if detected and detected != args.backbone:
+            print(f"Auto-detected backbone: {detected} (from checkpoint)")
+            args.backbone = detected
+
     model = MonocularDepthNet(swin_version=args.backbone, pretrained=(args.checkpoint is None)).to(device)
     if args.checkpoint:
-        state = torch.load(args.checkpoint, map_location=device)
+        state = torch.load(args.checkpoint, map_location=device, weights_only=True)
         model.load_state_dict(state)
     model.eval()
 

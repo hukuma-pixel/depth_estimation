@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 
 
 def scale_invariant_log_loss(pred, gt, alpha=10.0, lam=0.85, eps=1e-8):
