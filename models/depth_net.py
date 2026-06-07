@@ -32,7 +32,7 @@ class MonocularDepthNet(nn.Module):
 
         self.hafm3 = HAFM(C2)
         self.hafm2 = HAFM(C1)
-        self.hafm1 = HAFM(chs[0])
+        self.hafm1 = HAFM(chs[0], use_biformer=True)
 
         self.dprm = DPRM(channels=[C2, C1, chs[0]])
 

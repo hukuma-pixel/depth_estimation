@@ -22,9 +22,10 @@ class BiLevelRoutingAttention(nn.Module):
         self.kv_proj = nn.Linear(dim, dim * 2)
         self.out_proj = nn.Linear(dim, dim)
 
-    def forward(self, x, k=None, v=None):
+    def forward(self, x, k=None, v=None, H=None, W=None):
         B, N, C = x.shape
-        H = W = int(N ** 0.5)
+        if H is None or W is None:
+            H = W = int(N ** 0.5)
 
         if k is None:
             k = x

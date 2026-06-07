@@ -44,8 +44,15 @@ BACKBONE_MAP = {
 }
 
 
+def _unwrap_state(state):
+    if 'model_state_dict' in state:
+        return state['model_state_dict']
+    return state
+
+
 def detect_backbone(checkpoint_path):
     state = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+    state = _unwrap_state(state)
     pe_weight = state.get('encoder.patch_embed.proj.weight')
     if pe_weight is not None:
         embed_dim = pe_weight.shape[0]
@@ -75,7 +82,7 @@ def main():
     model = MonocularDepthNet(swin_version=args.backbone, pretrained=(args.checkpoint is None)).to(device)
     if args.checkpoint:
         state = torch.load(args.checkpoint, map_location=device, weights_only=True)
-        model.load_state_dict(state)
+        model.load_state_dict(_unwrap_state(state))
     model.eval()
 
     img_tensor, orig_size = load_image(args.image_path, args.input_size)

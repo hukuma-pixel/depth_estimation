@@ -72,9 +72,9 @@ class GAFB(nn.Module):
         )
         self.norm_ffn = nn.LayerNorm(channels)
 
-    def _run_attn(self, attn, q, k, v):
+    def _run_attn(self, attn, q, k, v, H=None, W=None):
         if self.use_biformer:
-            return attn(q, k, v)
+            return attn(q, k, v, H=H, W=W)
         out, _ = attn(q, k, v)
         return out
 
@@ -85,11 +85,11 @@ class GAFB(nn.Module):
 
         q = self.norm_cross_q(f_up_flat)
         kv = self.norm_cross_kv(f_enc_flat)
-        cross_out = self._run_attn(self.cross_attn, q, kv, kv)
+        cross_out = self._run_attn(self.cross_attn, q, kv, kv, H, W)
         x = cross_out + f_up_flat
 
         x_norm = self.norm_self(x)
-        self_out = self._run_attn(self.self_attn, x_norm, x_norm, x_norm)
+        self_out = self._run_attn(self.self_attn, x_norm, x_norm, x_norm, H, W)
         x = self_out + x
 
         x = self.ffn(self.norm_ffn(x)) + x
