@@ -229,11 +229,15 @@ data/
 *.tar
 *.gz
 *.zip
+*.pdf
+
+ex/
 
 # Outputs
 runs/
 outputs/
 checkpoints/
+tmp/
 *.pth
 *.pt
 
