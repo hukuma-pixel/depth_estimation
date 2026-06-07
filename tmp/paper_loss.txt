@@ -1,0 +1,1507 @@
+=== Page 1 ===
+Transformer-based monocular depth estimation with hybrid attention
+fusion and progressive regression
+Peng Liu a,b, Zonghua Zhang a,*, Zhaozong Meng a, Nan Gao a
+a School of Mechanical Engineering, Hebei University of Technology, Tianjin 300130, China
+b School of Intelligence and Information Engineering, Tangshan Colloge, Tangshan 063000, China
+A R T I C L E I N F O
+Keywords:
+Monocular depth estimation
+Transformer
+Hybrid attention fusion
+Progressive regression
+A B S T R A C T
+Monocular depth estimation has gained prominence due to its versatile applications and minimal system re-
+quirements, despite the inherent challenges posed by its ill-posed nature. Recent advancements in Transformer
+techniques have significantly propelled this field forward. This paper introduces a novel Transformer-based
+encoder-decoder network to enhance monocular depth estimation, presenting two key improvements
+compared to prior approaches. Firstly, a hybrid attention fusion module is designed in the decoding stage for
+feature fusion. This module employs a parallel hybrid structure design to fully leverage the complementary
+advantages of Transformers and convolution methods, effectively capturing both local contextual and global
+consistency of depth maps. Additionally, to mitigate fine-grained depth loss during decoder upsampling, a deep
+progressive regression module is proposed. This module gradually predicts depth maps of varying resolutions by
+enhancing interactions between adjacent prediction branches. Experimental results on challenging indoor and
+outdoor benchmark datasets affirm the superior performance of the proposed method, showing that it effectively
+addresses some of the limitations of existing approaches.
+1. Introduction
+Monocular depth estimation (MDE) endeavors to ascertain the depth
+information between the camera and scene objects from a single RGB
+image. This depth information finds broad applications in autonomous
+driving [1], virtual reality [2], three-dimensional (3D) reconstruction
+[3], etc. However, MDE is fundamentally an ill-posed problem due to the
+absence of reliable depth cues such as motion and stereo vision re-
+lationships, rendering it a challenging subject within the realm of
+computer vision.
+Current effective methods for MDE heavily depend on deep learning
+models to extract intricate information from abundant RGB images [4].
+The inception of convolutional neural network (CNN)-based methods
+marked a significant milestone in this domain [5–16]. To enhance the
+accuracy of CNN-based MDE, several approaches have been explored to
+improve the efficacy of convolution operators, including multi-scale
+extraction [8], atrous convolution [6,14], channel spatial attention [9,
+12,13], and feature pyramid [15]. Achieving precise dense estimation
+requires a model with a global receptive field for the scene alongside
+local detailed information. However, the inherently local nature of
+CNNs poses challenges in capturing long-range global information.
+Recognizing the excellence of the Transformer model in modeling
+long-term dependencies with global receptive fields [17], researchers
+have introduced visual Transformer models for MDE [18–30], yielding
+substantial progress. Despite these accomplishments, two primary im-
+pediments hinder further advancements in Transformer-based MDE
+methods, serving as the motivations for our proposed approach.
+Firstly, the majority of Transformer-based MDE methods [18–23]
+employ an encoder-decoder architecture. Encoders are typically chosen
+from standard image classification backbones pre-trained on ImageNet
+[31], and the decoder aggregates multi-scale features to generate the
+final depth map. While Transformers excel at modeling long-range de-
+pendencies with a global receptive field, CNNs still possess significant
+advantages in understanding local contextual information, particularly
+considering computational cost. The incorporation of advantages from
+both Transformers and CNNs has been demonstrated to effectively
+enhance model performance in various vision tasks [32–42]. However,
+current methods face challenges in integrating CNNs and Transformers
+in the decoder design, resulting in insufficient feature aggregation and a
+significant reduction in MDE performance.
+Secondly, after the gradual upsampling of decoder features, most
+encoder-decoder MDE architectures only leverage the branch of the
+* Corresponding author.
+E-mail address: zhzhang@hebut.edu.cn (Z. Zhang).
+Contents lists available at ScienceDirect
+Neurocomputing
+journal homepage: www.elsevier.com/locate/neucom
+https://doi.org/10.1016/j.neucom.2024.129268
+Received 21 January 2024; Received in revised form 2 September 2024; Accepted 23 December 2024
+Neurocomputing 620 (2025) 129268 
+Available online 25 December 2024 
+0925-2312/© 2024 Elsevier B.V. All rights are reserved, including those for text and data mining, AI training, and similar technologies. 
+
+=== Page 2 ===
+highest-scale decoder feature for depth regression, leading to a loss of
+local depth information [24]. Gradual supervision of depth maps
+[43–46] from small to large can mitigate detail loss and be more
+conducive to predicting fine-grained depth maps. Recently, grid-style
+network structures [47,48] have shown great potential in fine-grained
+prediction due to their advantages in achieving feature interaction at
+different resolutions.
+To address these challenges, this paper introduces a monocular depth
+estimation network with a Hybrid Transformer architecture. The pro-
+posed network employs the Swin Transformer [49] as the encoder, and a
+novel hybrid attention fusion module (HAFM) is introduced for feature
+fusion at each decoder stage. The HAFM leverages both Transformer and
+convolution to more effectively capture both local context and global
+consistency. Additionally, inspired by the grid-style design, we present a
+simple yet effective depth progressive regression module (DPRM) for
+estimating multi-scale depth maps using hierarchical features output by
+HAFM. HAFM significantly enhances feature interactions between
+different prediction branches through two types of skip connections,
+effectively preventing the attenuation of fine-grained information dur-
+ing the gradual upsampling process. Thanks to these design enhance-
+ments, our model demonstrates superior performance compared to
+state-of-the-art models.
+The contributions of this paper can be summarized as follows:
+• We propose a novel hybrid attention fusion module that effectively
+integrates the advantages of both convolution and Transformer.
+• We introduce a depth progressive regression module to estimate
+multi-scale
+depth
+maps,
+mitigating
+loss
+during
+the
+gradual
+upsampling.
+• We
+introduce
+an
+end-to-end
+Transformer-based
+network
+for
+monocular depth estimation, demonstrating superior performance
+compared to recent state-of-the-art methods on benchmark datasets
+for both indoor and outdoor scenes.
+The remaining sections of the paper are organized as follows: Section
+2 reviews related work, Section 3 provides a detailed explanation of the
+proposed method, Section 4 presents the experimental results, and
+Section 5 concludes the paper.
+2. Related work
+Deep learning methods have achieved significant strides in MDE,
+falling into two primary categories: CNN-based MDE and Transformer-
+based MDE. The subsequent sections offer detailed insights into each
+category. Additionally, a concise overview of hybrid CNN and Trans-
+former models is presented.
+2.1. CNN-based MDE methods
+Eigen et al. [5] pioneered the application of CNNs to the MDE task,
+comprising a global coarse prediction network and a local refinement
+network. Subsequently, a continuum of CNN-based MDE methods have
+emerged [6–15]. For example, Huynh et al. [12] introduced non-local
+coplanarity
+constraints
+and
+non-local
+attention
+mechanisms
+to
+enhance the estimation performance of planar structural regions in
+depth maps. Both [10] and [11] employed the encoder-decoder archi-
+tecture with skip connections for depth map estimation. Li et al. [14]
+fused different outputs from the dilated CNN in a hierarchical way to
+exploit the multi-scale feature for MDE. Chen et al. [15] applied a CNN
+framework with multi-scale feature fusion to generate high-quality
+depth predictions. Liu et al. [9] proposed an encoder-decoder with the
+combination of multi-scale fusion and joint attention mechanisms,
+enhancing the discriminability of feature processing. Lee et al. [8] uti-
+lized a local planar guidance operation to guide features to full scale,
+deviating from common upsampling layers in the decoding stage.
+2.2. Transformer-based MDE methods
+The emergence of Vision Transformer (ViT) architectures has
+demonstrated their efficiency in obtaining long-range dependencies and
+gained state-of-the-art performance for MDE. For example, Ranftl et al.
+[20] proposed a universal dense prediction Transformer model that
+achieved good results in semantic segmentation and monocular depth
+estimation. Bhat et al. [18] refined the output of CNN-based enco-
+der-decoder backbone using a ViT with global statistical analysis. Yuan
+et al. [19] built a bottom-up-top-down structure with neural window
+CRFs as decoder and ViT serves as encoder. Kim et al. [22] utilized ViT
+as the encoder and designed a selective feature fusion module to fuse
+features in the decoder stage. Li et al. [23] and Shao et al. [25] intro-
+duced different adaptive bins strategies based on Swin Transformer
+backbone to boost the MDE performance. Ning et al. [24] built an
+encoder-decoder depth estimation network based on a novelty trap
+attention mechanism.
+2.3. The hybrid transformer
+Given that Transformer models excel in extracting global de-
+pendencies and CNNs possess significant advantages in capturing local
+context information, researchers strive to combine both architectures to
+achieve complementary benefits and enhance overall model perfor-
+mance. Some approaches involve embedding CNNs into the Transformer
+architecture. For example, Lee et al. [32] proposed a network named
+MPViT, which incorporates convolutional paths within the Transformer
+Fig. 1. Architecture of the proposed network. The network comprises an encoder and a decoder pathway, with feature fusion between the corresponding layers.
+Function blocks are distinguished by the rectangle with different fill colors.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+2 
+
+=== Page 3 ===
+framework. Guo et al. [33] designed a novel Transformer-based hybrid
+network, leveraging the strengths of both Transformers and CNNs.
+Alternatively, some researchers adopt the Transformer and CNN as in-
+dependent branches, allowing them to fully leverage the advantages of
+the Transformer while preventing CNNs from discarding crucial infor-
+mation. For instance, Li et al. [21] utilized a parallel structure of
+Transformer and CNN as an encoder, introducing a hierarchical aggre-
+gation and heterogeneous interaction module to combine encoder fea-
+tures. Yoo et al. [37] introduced an effective hybrid network for
+aggregating enriched features in super-resolution tasks, combining local
+features captured by CNNs with long-range multi-scale dependencies
+from Transformers.
+By integrating the CNN and Transformer, the hybrid architectures
+are also used to leverage both local and global information for improved
+MDE. For example, Zhang et al. [38] proposed a joint convolutional
+attention and Transformer block for depth completion tasks, deeply
+coupling the convolutional layer and ViT into a unified block. Yang et al.
+[39] proposed a lightweight network that tightly couples CNN and
+Transformer for MDE. Bae et al. [40] examined the internal properties of
+representations from intermediate layers of hybrid CNN-Transformer
+models
+using
+synthetic
+datasets.
+Shao
+et
+al.
+[41]
+introduced
+uncertainty-rectified cross-distillation between CNN and Transformer
+models to enhance MDE.
+In this paper, we follow the Swin Transformer as the encoder and
+improve MDE performance to some extent following two aspects bellow.
+Firstly, we design a parallel hybrid feature fusion in the decoding stage
+by combining the complementary advantages of CNN and Transformer.
+Secondly, we use a progressive regression strategy with efficient skip
+connections for depth prediction.
+3. Proposed method
+This section firstly presents the overall architecture of our network. A
+detailed description of the proposed HAFM and DPRM will be provided
+in subsequent sections. Finally, we specify our loss function.
+3.1. Network architecture
+Fig. 1 illustrates the architecture of the proposed encoder-decoder
+network. In alignment with recent trends employing the Transformer
+for feature extraction, we utilize the Swin Transformer backbone with a
+four-stage pyramid structure as the encoder for processing RGB images.
+Given an input RGB image with resolution H×W, the outputs of the four
+stages are the encoder features {F1
+e, F2
+e, F3
+e, F4
+e} at scales {1/4, 1/8, 1/16,
+1/32} respectively, with channel dimensions {C1, C2, C3, C4}= {C, 2 C,
+4 C, 8 C}, where C is set to 192 as per the configuration in [49]. In the
+decoding stage, the upsampling block (UB) depicted in Fig. 1 is used
+between each two adjacent stages to upsample the lower-resolution
+feature map for feature fusion. The UB comprises a 3 × 3 convolution
+for feature channel reduction, along with a combination of a patch
+shuffle layer and a 1 × 1 convolution for feature upsampling.
+Three proposed HAFMs fuse the upsampling features with the cor-
+responding scale encoder features. The three sets of decoder features
+generated by the HAFMs are input to the DPRM. The DPRM progres-
+sively predicts three sets of depth maps {D3, D2, D1} with resolutions {H/
+4 ×W/4, H/2 ×W/2, H×W}, respectively.
+3.2. Hybrid attention fusion module
+To efficiently integrate the strengths of both CNN and Transformer
+during the hierarchical upsampling of the decoder, we have devised a
+HAFM, as depicted in Fig. 2. The HAFM adopts a hybrid Transformer
+design. It consists of three types of sub-blocks: the local residual fusion
+block (LRFB), the global attention fusion block (GAFB), and the selective
+fusion block (SFB), as also illustrated in Fig. 2. The encoder feature and
+the upsampling feature are directed to the LRFB and GAFB, respectively.
+The GAFB is structured based on a Transformer design, ensuring the
+effective fusion of global contextual information, while the LRFB is
+designed based on a CNN structure to ensure effective fusion of local
+details. Subsequently, the output of the
+GAFB and LRFB are fed into the SFB to achieve adaptive fusion of the
+global feature and local feature.
+As shown in Fig. 2, the GAFB leverages multi-head self-attention
+(MHSA) and cross-attention mechanisms to process the input features.
+The GAFB initially normalizes encoder feature Fi
+e and upsampling
+feature Fi
+u separately. Subsequently, a 1× 1 convolution and a 3× 3
+depth-separable convolution encodes relative position information more
+Fig. 2. Details of the proposed hybrid attention fusion module. This module includes three types of sub-blocks: the local residual fusion block, the global attention
+fusion block, and the selective fusion block. Transformers and convolutions are effectively used to capture local context and global consistency.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+3 
+
+=== Page 4 ===
+effectively, facilitating subsequent global attention calculations [50]. To
+mitigate computational complexity, GAFB employs the global attention
+calculation method proposed by BiFormer [51] for the bi-level routing
+self-attention (BRSA) of the upsampling feature and the bi-level routing
+cross-attention (BRCA) between the encoder feature and upsampling
+feature. BiFormer achieves content-aware sparse patterns through
+region-level routing and token-level attention steps in a query-adaptive
+manner,
+resulting
+in
+a
+superior
+computational
+complexity
+of
+O((H × W)4/3), while the commonly used multi-head self-attention has a
+computational complexity of O((H × W)2). The sum of the two global
+attentions is input into a feed forward network with a residual connec-
+tion, completing the generation of global feature Fi
+global. The fusion of
+cross-attention and self-attention within GAFB comprehensively in-
+tegrates features from a global perspective, enhancing its global repre-
+sentation capability. The procedure is outlined as follows:
+Fi
+t1 = BRCA
+(
+Wen
+(
+LN
+(
+Fi
+e
+))
+, Wen
+(
+LN
+(
+Fi
+u
+)))
++BRSA
+(
+Wen
+(
+LN
+(
+Fi
+u
+)))
++ Fi
+u
+(1)
+Fi
+global = Fi
+t1 + FFN
+(
+LN
+(
+Fi
+t1
+))
+(2)
+where LN(⋅) denotes the normalization layer. FFN(⋅) denotes the feed
+forward network. Fi
+t1 denotes the temporary feature. Wen(⋅) denotes two
+serially arranged convolutional layers for encoding purpose, comprising
+a 1 × 1 convolution and a 3 × 3 depth separable convolution. Both
+BRSA(⋅) and BRCA(⋅) calculate the global attention using the method
+provided by BiFormer [51].
+The LRFB uses a composite residual structure and a convolutional
+channel attention mechanism for feature fusion. First, features are
+aggregated through concatenation and a 1 × 1 convolution. Then, three
+sets of 3 × 3 convolutions within the composite residual structure
+enhance local information. A standard channel attention block (CAB)
+[52] is integrated to adaptively rescale the channel features. The CAB
+aggregates spatial information through global average-pooling (GAP)
+and global max-pooling (GMP) operations, followed by the utilization of
+a multi-layer perceptron (MLP) and Sigmoid operation to generate the
+channel attention map. Finally, LRFB effectively processes local regions
+and generates the local feature Fi
+local during feature fusion using the
+aforementioned traditional CNN operations. The process of feature
+fusion in LRFB is outlined as follows:
+Fi
+t2 = W1×1
+(
+concat
+(
+Fi
+u, Fi
+e
+))
+(3)
+Fi
+local = Fi
+t2 + WRes
+(
+Fi
+t2
+)
+⋅CA
+(
+WRes
+(
+Fi
+t2
+))
+(4)
+where concat(⋅) denotes the concatenation. CA(⋅) denotes the channel
+attention calculation.
+The SFB adaptively fuses local and global features extracted from the
+LRFB and GAFB by generating spatial attention maps. These maps
+exploit interdependencies between local and global features, optimizing
+the fusion process. Initially, the two input features are concatenated
+along the channel dimension and subjected to a series of convolution
+operations for feature extraction. Subsequently, a 3 × 3 convolution and
+a Sigmoid function are applied to produce two channel spatial attention
+maps (SAi). Finally, we multiply the two attention maps with the cor-
+responding input features and add the results to generate decoder
+feature. The procedural steps are outlined as follows:
+SAl, SA2 = δ
+(
+W3×3
+(
+Wext
+(
+concat
+(
+Fi
+local, Fi
+global
+))))
+(5)
+Fi
+d = SAl⋅Fi
+local + SA2⋅Fi
+global
+(6)
+where δ(⋅) denotes the Sigmoid function.
+3.3. Depth progressive regression module
+In contrast to conventional deep regression methods that exclusively
+leverage the branch of the highest-scale feature for regression purposes,
+our proposed DPRM adopts a novel approach by predicting three sets of
+depth maps with varying resolutions, progressively ranging from small
+to large. This progressive depth regression strategy proves advantageous
+in mitigating the loss associated with detailed depth information, ulti-
+mately yielding more refined depth maps.
+As depicted in Fig. 3, the structure of the DPRM is inspired by the
+grid-style design [47,48]. To establish three backbone regression
+branches, we employ a series connection of an UB and a prediction head
+(PH). Subsequently, two types of skip connections are introduced be-
+tween
+adjacent
+prediction
+branches:
+the
+feature-to-feature
+skip
+connection and the depth-to-feature skip connection. The former links
+the output of each UB to the same-scale feature of the adjacent regres-
+sion backbone, enhancing the expression of each scale feature. The
+latter, known as the depth-to-feature skip connection, establishes a
+connection between the depth map and the input of the PH with an
+adjacent scale. This connection is achieved by applying the vertical
+block (VB) shown in Fig. 3 to the depth map. The feature-to-feature skip
+connection enriches the expression of each scale feature, while the
+depth-to-feature skip connection renders the input feature of each PH
+more meaningful. The processing of features in the DPRM can be
+described as:
+D3 = PH
+(
+UB
+(
+F3
+d
+))
+(7)
+F2
+t3 = UB
+(
+F3
+d
+)
++ F2
+d
+(8)
+D2 = PH
+(
+UB
+(
+F2
+t3
+)
++ VB
+(
+D3))
+(9)
+F1
+t4 = UB
+(
+F2
+d
+)
++ F1
+d
+(10)
+Fig. 3. Details of the proposed depth progressive regression module. This module establishes three backbone regression branches and implements two types of skip
+connections between adjacent prediction branches.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+4 
+
+=== Page 5 ===
+D1 = PH
+(
+UB
+(
+F1
+t4
+)
++ VB
+(
+D2))
+(11)
+where UB(⋅) denotes the upsampling block. PH(⋅) denotes the prediction
+head. VB(⋅) denotes the vertical block.
+3.4. Loss function
+The loss function plays a crucial role in adjusting network parame-
+ters during training, exerting a substantial influence on the ultimate
+estimation accuracy. In our model, the loss function comprises the sum
+of a depth loss and a normal loss. Each loss term is elucidated below.
+1) Depth loss. Following previous Transformer-based MDE methods
+[18,21], we use the scale invariant logarithmic loss to supervise our
+network. Given the ground truth depth y∗
+i and the predicted depth yi at a
+pixel location i. The depth loss function is calculated as:
+Ldepth = α
+̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅
+1
+n
+∑
+i
+(
+lg yi −
+lg y∗
+i
+)2 −
+λ
+n2
+(∑
+i
+(
+lg yi −
+lg y∗
+i
+)
+)2
+√
+√
+√
+√
+(12)
+where n denotes the number of ground truth pixels in a depth map.
+Following [21], λ and α are set to be 0.85 and 10, respectively.
+2) Normal loss. To compute the mean plane loss and capture more
+structural prediction differences, we evaluate the surface normal dif-
+ference for all non-overlapping patches. The calculation of the normal
+loss is as follows:
+Lnormal = 1
+n
+∑
+i
+⃦⃦Ni −N∗
+i
+⃦⃦2
+2
+(13)
+where Ni and N∗
+i are the surface normals of the predicted depth map and
+the corresponding ground truth. Surface normals are computed by
+stacking the 3D depth points within the patch and solving a closed-form
+solution for a least-squares problem, as outlined in [53,54].
+4. Experimental results
+In this section, we conducted experimental comparisons to evaluate
+the performance of the proposed method in comparison to state-of-the-
+art techniques. Additionally, we analyzed the impact of the proposed
+HAFM and DPRM through ablation studies.
+4.1. Experimental setup
+Datasets. We chose the NYU-V2 [55] dataset for indoor scenes and
+the KITTI dataset [56] for outdoor scenes for both training and testing.
+To assess the generalization of the generated indoor model, we utilized
+the iBims-1 [57] dataset specifically designed for indoor scenes.
+We employed the official split method [5] to split NYU-V2 and KITTI
+datasets. Specifically, for NYU-V2, approximately 50,000 image sets
+from 249 scenes were selected for training, while 654 image sets from
+Table 1
+Performance evaluation on NYU-V2. The best scores are highlighted in bold font.
+Methods
+Error (lower is better)
+Accuracy (higher is better)
+Abs Rel
+RMSE
+Log10
+δ1
+δ2
+δ3
+Fu et al. [6]
+0.114
+0.510
+0.052
+0.829
+0.966
+0.992
+Yin et al. [7]
+0.108
+0.416
+0.048
+0.875
+0.976
+0.994
+Lee et al. [8]
+0.110
+0.392
+0.047
+0.885
+0.978
+0.994
+Patil et al. [50]
+0.104
+0.356
+0.038
+0.898
+0.981
+0.996
+Xiao et al. [16]
+0.104
+0.380
+0.045
+0.895
+0.983
+0.996
+Bhat et al. [18]
+0.103
+0.364
+0.044
+0.903
+0.984
+0.997
+Ranftl et al. [20]
+0.110
+0.357
+0.045
+0.904
+0.988
+0.998
+Yang et al. [28]
+0.106
+0.365
+0.045
+0.900
+0.983
+0.996
+Li et al. [30]
+0.106
+0.349
+-
+0.905
+0.989
+0.998
+Yuan et al. [19]
+0.095
+0.334
+0.041
+0.922
+0.992
+0.998
+Li et al. [21]
+0.096
+0.339
+0.041
+0.921
+0.989
+0.998
+Li et al. [23]
+0.094
+0.330
+0.040
+0.925
+0.989
+0.997
+Ning et al. [24]
+0.090
+0.329
+0.039
+0.927
+0.991
+0.998
+Agarwal et al. [26]
+0.090
+0.322
+0.039
+0.929
+0.991
+0.998
+Shao et al. [27]
+0.087
+0.311
+0.038
+0.936
+0.991
+0.998
+Ours
+0.086
+0.316
+0.036
+0.936
+0.992
+0.998
+Fig. 4. Qualitative comparison results on NYU-V2. Color indicates depth (red is far, blue is close). (a) RGB images, (b) ground truth depth maps, results of (c) Lee
+et al. [8], (d) Bhat et al. [18], (e) Yuan et al. [19], (f) Shao et al. [27], and (g) the proposed method.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+5 
+
+=== Page 6 ===
+215 scenes were used for testing. Both depth maps and RGB images were
+centered and cropped into 608 × 456 pixels to eliminate edge areas with
+significant depth deviation. For KITTI, 22,000 images sets from 28
+scenes were utilized for training, while 697 images sets from different
+scenes were reserved for testing. Both depth maps and RGB images were
+resized to 1216 × 352 pixels. Loss evaluation was conducted solely on
+valid LIDAR points of depth maps and we capped the maximum pre-
+dictions of all networks to a maximum depth of 80 m. The training
+dataset enhancement operations for NYU-V2 and KITTI followed the
+approach referenced in [8].
+The iBims-1 dataset comprises 100 high-quality RGB-D images. In
+comparison to NYU-V2, iBims-1 exhibits a similar depth range, features
+distinct indoor scenes, and boasts higher-quality depth maps.
+Implementation Details. Our network implementation was carried
+out on Ubuntu 18.04, utilizing the PyTorch framework. Training took
+place on two NVIDIA RTX A4000 GPUs with a batch size of 8. For
+training optimization, we employed the Adam optimizer to adjust
+network parameters. The initial learning rate was set at 0.0001, reduced
+by 10 % every 5 cycles, with β1 = 0.9, β2 = 0.999, and a decay rate of
+0.0001. The training epoch was configured for 30 cycles.
+Evaluation Metrics. We employed standard error and accuracy
+evaluation metrics commonly utilized in MDE studies for quantitative
+assessment. Given the predicted depthyi, and the ground truth depth y∗
+i
+at a pixel i, and n denoting the total number of pixels in an image, the
+Table 2
+Performance evaluation on KITTI. Depths are capped at 80 m. The best scores
+are highlighted in bold font.
+Methods
+Error (lower is better)
+Accuracy (higher is better)
+Abs Rel
+RMSE
+Sq Rel
+δ1
+δ2
+δ3
+Fu et al. [6]
+0.071
+2.728
+0.306
+0.932
+0.985
+0.994
+Yin et al. [7]
+0.072
+3.258
+0.302
+0.938
+0.990
+0.998
+Lee et al. [8]
+0.060
+2.798
+0.249
+0.955
+0.993
+0.998
+Patil et al. [50]
+0.071
+2.842
+0.270
+0.953
+0.993
+0.998
+Xiao et al. [16]
+0.057
+2.415
+0.201
+0.964
+0.996
+0.999
+Bhat et al. [18]
+0.058
+2.360
+0.190
+0.964
+0.995
+0.999
+Ranftl et al. [20]
+0.062
+2.573
+0.092
+0.959
+0.995
+0.999
+Yang et al. [28]
+0.064
+2.755
+0.252
+0.956
+0.994
+0.999
+Li et al. [30]
+0.060
+2.325
+-
+0.964
+0.996
+0.999
+Yuan et al. [19]
+0.052
+2.129
+0.155
+0.974
+0.997
+0.999
+Li et al. [21]
+0.052
+2.143
+0.158
+0.975
+0.997
+0.999
+Li et al. [23]
+0.052
+2.098
+0.151
+0.974
+0.997
+0.999
+Ning et al. [24]
+0.050
+1.869
+0.128
+0.980
+0.998
+0.999
+Agarwal et al. [26]
+0.051
+2.081
+0.149
+0.976
+0.997
+0.999
+Shao et al. [27]
+0.050
+2.025
+0.141
+0.978
+0.998
+0.999
+Ours
+0.050
+2.011
+0.127
+0.981
+0.998
+0.999
+Fig. 5. Qualitative comparison results on KITTI. Color indicates depth (yellow is far, purple is close). (a) RGB images, (b) ground truth depth maps, results of (c) Lee
+et al. [8], (d) Bhat et al. [18], (e) Shao et al. [27], and (f) the proposed method.
+Fig. 6. Qualitative comparison results on iBims-1. Color indicates depth (red is
+far, blue is close). (a) RGB images, (b) ground truth depth maps, results of (c)
+Lee et al. [8], (d) Shao et al. [27], and (e) the proposed method.
+Table 3
+Performance evaluation on iBims-1. The best scores are highlighted in bold font.
+Methods
+Error (lower is better)
+Accuracy (higher is better)
+Abs Rel
+RMSE
+Log10
+δ1
+δ2
+δ3
+Lee et al. [8]
+0.288
+2.452
+0.178
+0.181
+0.568
+0.879
+Shao et al. [27]
+0.262
+2.652
+0.162
+0.195
+0.623
+0.884
+Ours
+0.238
+2.442
+0.159
+0.231
+0.642
+0.888
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+6 
+
+=== Page 7 ===
+error evaluation metrics are defined as follows.
+Abs Relative difference:
+AbsRel = 1
+n
+∑
+i
+⃒⃒yi −y∗
+i
+⃒⃒
+y∗
+i
+(14)
+Squared Relative difference:
+SqRel = 1
+n
+∑
+i
+⃦⃦yi −y∗
+i
+⃦⃦2
+y∗
+i
+(15)
+Mean Log10 error:
+Log10 = 1
+n
+∑
+i
+⃒⃒log10yi −log10y∗
+i
+⃒⃒
+(16)
+Root Mean Squared Error:
+RMSE =
+̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅̅
+1
+n
+∑
+i
+(
+yi −y∗
+i
+)2
+√
+(17)
+The accuracy evaluation metrics (Threshold Accuracy) is defined as
+follows:
+TA = 1
+n
+∑
+ig
+(
+yi, y∗
+i
+)
+(18)
+where
+g
+⎛
+⎜
+⎝yi, y∗
+i
+⎞
+⎟
+⎠=
+⎧
+⎪
+⎨
+⎪
+⎩
+1, δ = max
+(y∗
+i
+yi
+, yi
+y∗
+i
+)
+< thr
+0,
+otherwise
+(19)
+TA describes the ratio of maximum relative error δbelow threshold
+thr. Conditions δ < 1.25, δ < 1.252, and δ < 1.253 were used in the
+experiment, denoted as δ1, δ2, δ3, respectively.
+Fig. 7. Model efficiency comparisons. (a) Model parameter vs. RMSE. (b) Inference time vs. RMSE.
+Table 4
+Quantitative comparison results of different feature fusion methods. w/o means
+without.
+Methods
+Error (lower is better)
+Accuracy (higher is better)
+Abs Rel
+RMSE
+Log10
+δ1
+δ2
+δ3
+LRFB
+0.117
+0.541
+0.051
+0.862
+0.971
+0.992
+LRFB w/o CAB
+0.118
+0.544
+0.053
+0.860
+0.969
+0.992
+GAFB
+0.114
+0.527
+0.049
+0.870
+0.974
+0.992
+LRFB with MHSA
+0.115
+0.529
+0.050
+0.868
+0.973
+0.992
+SFB
+0.117
+0.525
+0.050
+0.862
+0.973
+0.993
+SFB w/o SA
+0.117
+0.528
+0.051
+0.860
+0.971
+0.992
+HAFM
+0.086
+0.316
+0.036
+0.936
+0.992
+0.998
+Fig. 8. Qualitative comparison results of different feature fusion methods. Color indicates depth (red is far, blue is close). (a) RGB images, (b) ground truth depth
+maps, results of (c) LRFB, (d) GAFB, (e) SFB, and (f) HAFM.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+7 
+
+=== Page 8 ===
+4.2. Performance comparison
+4.2.1. Experiment on NYU-V2
+Table 1 presents results of the evaluation metrics, model parameters,
+and inference time. The results of the compared methods were sourced
+from the literature. The initial four rows correspond to CNN-based
+methods,
+while
+the
+subsequent
+rows
+are
+all
+Transformer-based
+methods. The table highlights that our method achieved optimal per-
+formance in accuracy metrics and the best performance in two error
+metrics. Specifically, our method improves Abs Rel by 1.2 % and Log10
+by 5.3 % compared to the suboptimal result, while RMSE is 1.6 % higher
+than the optimal result.
+Fig. 4 presents qualitative comparison results, illustrating the supe-
+rior predictive performance of our method, particularly in capturing
+local geometric details such as depth boundaries of tables, chairs, and
+home furnishings. Moreover, our method excels in capturing essential
+global features of depth maps, encompassing overall depth distribution
+and scene depth variations. This dual capability to predict both local and
+global scene depth information is evident in both qualitative and
+quantitative assessments, affirming the enhanced accuracy of indoor
+depth estimation achieved by the proposed method.
+4.2.2. Experiment on KITTI
+Our method underwent evaluation on the KITTI dataset, with the
+corresponding metrics detailed in Table 2. Remarkably, our method
+surpasses the majority of competitors, achieving state-of-the-art results
+in five
+evaluation metrics. The only exception is the RMSE metric, which is
+marginally inferior to that reported by Ning et al. [24]. Qualitative
+comparison
+results
+are
+presented
+in
+Fig.
+5,
+demonstrating
+the
+commendable performance of our method in capturing fine-grained
+depth information, including pedestrians and vehicles, as well as
+depicting global depth changes within the scene.
+4.2.3. Cross-dataset validation
+To demonstrate the generalization capability of the proposed
+network, we evaluated the generated indoor model using the iBims-1
+dataset. Among the selected comparison methods, Lee et al. [8] is the
+CNN-based methods, and Shao et al. [27] is the second best among the
+Transformer-based methods after the proposed method. It is noteworthy
+that the comparison methods were trained and generated on the
+NYU-V2 dataset without any parameter adjustments.
+Fig. 6 and Table 3 presents both qualitative and quantitative com-
+parison results. Our method surpasses the competitors across all per-
+formance
+metrics
+and
+achieves
+notably
+superior
+visual
+results.
+Consequently,
+our method exhibits enhanced generalization.
+4.2.4. Model efficiency comparison
+Inference time and model parameters are crucial metrics for evalu-
+ating the efficiency of MDE methods. We
+conducted a trade-off analysis between RMSE, model parameters,
+and inference time, as visualized in Fig. 7. The results of the compared
+methods were obtained by executing their open-source codes on our test
+machine. From Fig. 7, it is evident that, compared to other Transformer-
+based methods, our approach achieves a superior balance in depth
+Table 5
+Quantitative comparison results of different depth regression methods. F-F
+means feature-to-feature and D-F means depth-to-feature.
+Methods
+Error (lower is better)
+Accuracy (higher is
+better)
+Abs
+Rel
+RMSE
+log10
+δ1
+δ2
+δ3
+One branch
+0.114
+0.534
+0.045
+0.912
+0.981
+0.995
+Without skip
+connection
+0.111
+0.527
+0.049
+0.917
+0.986
+0.995
+Only F-F skip
+connection
+0.089
+0.318
+0.040
+0.934
+0.990
+0.998
+Only D-F skip
+connection
+0.090
+0.316
+0.039
+0.932
+0.991
+0.998
+DPRM
+0.086
+0.316
+0.036
+0.936
+0.992
+0.998
+Fig. 9. Qualitative comparison results of different depth regression methods. Color indicates depth (red is far, blue is close). (a) RGB images, (b) ground truth depth
+maps, results of (c) one branch, (d) without skip connection, (e) only D-F skip connection, and (f) DPRM.
+Fig. 10. Qualitative comparison of different resolution outputs by DPRM. Color
+indicates depth or value (red is far or big, blue is close or small). (a) RGB im-
+ages, (b) ground truth depth maps, predicted depth maps and corresponding
+absolute prediction errors for the branches of (c) D3, (d) D2, and (e) D1.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+8 
+
+=== Page 9 ===
+estimation performance metrics, model parameters, and inference time.
+While the RMSE of Shao et al. [27] is only 0.05 better than ours, its
+inference time is approximately 70 ms longer, and its model parameters
+exceed ours by about 120 million. Although our method carries a
+disadvantage in terms of parameters and inference time compared with
+CNN-based methods, quantitative evaluation metrics of our method
+outperform those of the CNN-based methods by a considerable margin.
+4.3. Ablation study
+Several ablation experiments were undertaken to assess the effec-
+tiveness and rationale behind the proposed HAFM and CPRM. All ex-
+periments were executed on the NYU-V2 dataset.
+4.3.1. Effectiveness of HAFM
+Table 4 presents the quantitative comparison results for different
+feature fusion methods in the decoder stage. Evidently, the internal
+attention mechanisms used by LRFB, GAFB, and SFB make each block
+more efficient at processing features, thereby improving predictive
+performance. The HAFM combines LRFB, GAFB, and SFB in a
+rational manner, resulting in superior depth estimation performance
+compared to using any of them individually. Compared to the subopti-
+mal result, HAFM improves Abs Rel by 24.5 %, Log10 by 68.4 %, and
+RMSE by 26.5 %.
+Visual results in Fig. 8 demonstrate the efficacy of our HAFM in
+comparison to alternative feature fusion methods. HAFM exhibits a
+more comprehensive and superior depth estimation performance. Spe-
+cifically, when contrasted with GAFB, HAFM excels in capturing finer
+details of object boundaries. Additionally, in comparison to LRFB,
+HAFM outperforms in predicting global depth changes.
+4.3.2. Effectiveness of DPRM
+Table 5 presents quantitative comparisons of various depth regres-
+sion methods within the network. The term “one branch” denotes uti-
+lizing the branch with the highest-scale fused feature for depth
+regression, while “without skip connections” indicates using three
+backbone prediction branches without any skip connection for depth
+regression. The table illustrates that employing only the highest-scale
+feature branch for depth estimation performs the least favorably
+among the compared methods. Adding skip connections between adja-
+cent prediction branches enhances feature interactions and therefore
+significantly improves performance, and the skip connections used in
+our DPRM achieve optimal results. In Fig. 9, visual comparisons of
+various depth regression methods are presented. Since the performance
+indicators of feature-to-feature skip connection and depth-to-feature
+skip connection are nearly equal, only the depth-to-feature skip
+connection was chosen for qualitative analysis. The visual comparison
+results demonstrate the superior performance of the proposed DPRM,
+especially in estimating depth maps with finer-grained structural details
+of the furniture.
+Fig. 10 shows a visual comparison of three different resolution depth
+maps (D1, D2, and D3 in Fig. 3) output by DPRM. For convenience, we
+adjusted the resolution of each image to the same size. It is evident that
+the absolute prediction errors for deep edges in D1 is lower than in D2
+and D3, indicating that DPRM effectively mitigates the prediction loss of
+fine-grained depth information during the decoder’s layer-by-layer
+upsampling process.
+5. Conclusion and future work
+This paper introduces a Transformer-based MDE network incorpo-
+rating hybrid attention fusion and depth progressive regression. The
+network includes a HAFM based on a hybrid Transformer design. The
+HAFM, rooted in a parallel hybrid Transformer and CNN design, effec-
+tively synergizes convolutional and Transformer strengths, elevating
+feature fusion within the decoder stage. Additionally, a DPRM is devised
+to progressively regress depth maps at different scales. Experimental
+results on NYU-V2 and KITTI datasets demonstrated the superior per-
+formance of our proposed methods. A series of ablation experiments
+validated the efficacy and rationale of the introduced HAFM and DPRM.
+Future research endeavors will explore the integration of the proposed
+network into a monocular visual simultaneous localization and mapping
+system for both indoor and outdoor scenes.
+CRediT authorship contribution statement
+Nan Gao: Validation, Supervision, Software. Zhaozong Meng: Su-
+pervision, Methodology, Formal analysis, Conceptualization. Zonghua
+Zhang: Writing – review & editing, Supervision, Methodology, Funding
+acquisition, Conceptualization. Peng Liu: Writing – review & editing,
+Writing – original draft, Visualization, Validation, Methodology, Inves-
+tigation, Funding acquisition, Formal analysis, Conceptualization.
+Declaration of Competing Interest
+The authors declare that they have no known competing financial
+interests or personal relationships that could have appeared to influence
+the work reported in this paper.
+Acknowledgments
+This work was supported in part by National Natural Science Foun-
+dation of China (No. 52075147, U2341275), Science and Technology
+Program of Tangshan, China (No. 22130205H), Doctoral Innovation
+Foundation of Tangshan University, China (No. BC202401), Science and
+Technology Project of Hebei Education Department (No. BJK2023064),
+and Science Research Project of Hebei Education Department (No.
+JZX2024021).
+Data availability
+No data was used for the research described in the article.
+References
+[1] C. Zhang, G. Meng, B. Fan, K. Tian, Z. Zhang, S. Xiang, C. Pan, Reusable
+architecture growth for continual stereo matching, IEEE Trans. Pattern Anal. Mach.
+Intell. 46 (9) (2024) 6167–6184.
+[2] Z. Cheng, C. Han, J. Liang, Q. Wang, X. Zhang, D. Liu, Self-supervised adversarial
+training of monocular depth estimation against physical-world attacks, IEEE Trans.
+Pattern Anal. Mach. Intell. (2024) (Early Access).
+[3] X. Dai, R. Zhao, P. Hu, A. Munteanu, PatientHandNet: 3-D Open-palm hand
+reconstruction from sparse multi-view depth images, IEEE Trans. Instrum. Meas. 72
+(2023) 1–13.
+[4] Y. Ming, X. Meng, C. Fan, H. Yu, Deep learning for monocular depth estimation: A
+review, Neurocomputing 438 (2021) 14–33.
+[5] D. Eigen, C. Puhrsch, R. Fergus, Depth map prediction from a single image using a
+multi-scale deep network, Proc. Adv. Neural Inf. Process. Syst. Workshops (NIPS)
+(2014) 2366–2374.
+[6] H. Fu, M. Gong, C. Wang, K. Batmanghelich, D. Tao, Deep ordinal regression
+network for monocular depth estimation, In: Proceedings of, IEEE/CVF Conf.
+Comput. Vis. Pattern Recognit. (CVPR) (2018) 2002–2011.
+[7] W. Yin, Y. Liu, C. Shen, and Y. Yan, Enforcing geometric constraints of virtual
+normal for depth prediction, In: Proceedings of the IEEE International Conference
+on Computer Vision (ICCV), 2019, pp. 5683-5692.
+[8] J.H. Lee, M.-K. Han, D.W. Ko, I.H. Suh, 2019, From big to small: Multi-scale local
+planar guidance for monocular depth estimation, arXiv preprint, arXiv:
+1907.10326..
+[9] P. Liu, Z. Zhang, Z. Meng, N. Gao, Joint attention mechanisms for monocular depth
+estimation with multi-scale convolutions and adaptive weight adjustment, IEEE
+Access 8 (2020) 184437–184450.
+[10] J. Liu, Q. Li, R. Cao, W. Tang, G. Qiu, A contextual conditional random field
+network for monocular depth estimation, Image Vis. Comput. 98 (2020)
+103922–103936.
+[11] A. Ibraheem, W. PeterHigh quality monocular depth estimation via transfer
+learning, arXiv preprint, arXiv: 1812.11941v2.2018.
+[12] L. Huynh, P. Nguyen-Ha, J. Matas, E. Rahtu, J. Heikkil¨a, Guiding monocular depth
+estimation using depth-attention volume, Proc. Eur. Conf. Comput. Vis. (ECCV)
+(2020) 581–597.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+9 
+
+=== Page 10 ===
+[13] W. Zhao, Y. Song, T. Wang, SAU-Net: Monocular depth estimation combining
+multi-scale features and attention mechanisms, IEEE Access 11 (2023)
+137734–137746.
+[14] B. Li, Y. Dai, M. He, Monocular depth estimation with hierarchical fusion of dilated
+CNNs and soft-weighted-sum inference, Pattern Recognit. 83 (2018) 328–339.
+[15] X. Chen, X. Chen, Z. Zha, Structure-aware residual pyramid network for monocular
+depth estimation, In: Proceedings of the International Joint Conference on
+Artificial Intelligence (IJCAI), 2019, pp. 694-700.
+[16] J. Xiao, L. Li, X. Su, G. Tan, Multi-scale monocular depth estimation based on
+global understanding, IEEE Access 12 (2024) 46930–46939.
+[17] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A.N. Gomez, L. Kaiser,
+I. Polosukhin, Attention is all you need, : Proc. Adv. Neural Inf. Process. Syst.
+Workshops (NIPS) (2017) 5998–6008.
+[18] S.F. Bhat, I. Alhashim, P. Wonka, AdaBins: Depth estimation using adaptive bins,
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2021, pp. 4009-4018.
+[19] W. Yuan, X. Gu, Z. Dai, S. Zhu, P. Tan, Neural window fully connected CRFs for
+monocular depth estimation, In: Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2022, pp. 3916-3925.
+[20] R. Ranftl, A. Bochkovskiy, V. Koltun, Vision Transformers for dense prediction, In:
+Proceedings of the IEEE International Conference on Computer Vision (ICCV),
+2021, pp. 12159-12168.
+[21] Z. Li, Z. Chen, X. Liu, J. Jiang, DepthFormer: Exploiting longrange correlation and
+local information for accurate monocular depth estimation, Mach. Intell. Res. 20
+(6) (2023) 837–854.
+[22] D. Kim, W. Ga, P. Ahn, D. Joo, S. Chun, J. Kim, 2022, Global-local path networks
+for monocular depth estimation with vertical cut depth, arXiv preprint, arXiv:
+2201.07436.
+[23] Z. Li, X. Wang, X. Liu, J. Jiang, Binsformer: Revisiting adaptive bins for monocular
+depth estimation, IEEE Trans. Image Process. 33 (2024) 3964–3976.
+[24] C. Ning and H. Gan, Trap attention: Monocular depth estimation with manual
+traps, In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2023, pp. 5033-5043.
+[25] S. Shao, Z. Pei, X. Wu, Z. Liu, W. Chen, Z. LiIEBins: Iterative elastic bins for
+monocular depth estimation, arXiv preprint, arXiv: 2309.141372023.
+[26] A. Agarwal and C. Arora, Attention attention everywhere: Monocular depth
+prediction with skip attention, In: Proceedings of the IEEE/CVF Winter Conference
+on Applications of Computer Vision (WACV), 2023, pp. 5850-5859.
+[27] S. Shao, Z. Pei, W. Chen, P. Chen, Z. Li, NDDepth: Normal distance assisted
+monocular depth estimation and completion, IEEE Trans. Pattern Anal. Mach.
+Intell. (2024) (Early Access).
+[28] G. Yang, H. Tang, M. Ding, N. Sebe, E. Ricci, Transformer based attention networks
+for continuous pixel-wise prediction, In: Proceedings of the IEEE International
+Conference on Computer Vision (ICCV), 2021, pp.16249-16259.
+[29] L. Papa, P. Russo, I. Amerini, METER: A mobile vision Transformer architecture for
+monocular depth estimation, IEEE Trans. Circuits Syst. Video Technol. 33 (10)
+(2023) 5882–5893.
+[30] T. Li, Y. Zhang, A contour-aware monocular depth estimation network using Swin
+Transformer and cascaded multiscale fusion, IEEE Sen. J. 24 (8) (2024)
+13620–13628.
+[31] J. Deng, W. Dong, R. Socher, L.J. Li, K. Li, F. Li, ImageNet: A large-scale
+hierarchical image database, In: Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2009, pp. 248-255.
+[32] Y. Lee, J. Kim, J. Willette, S.J. Hwang, MPViT: Multi-path vision transformer for
+dense prediction, In: Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), 2022, pp. 7277-7286.
+[33] J. Guo, K. Han, H. Wu, Y. Tang, X. Chen, Y. Wang, C. Xu, CMT: Convolutional
+neural networks meet vision transformers, In: Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), 2022, pp.12165-
+12175.
+[34] L. Han, H. Lv, Y. Zhao, H. Liu, G. Bi, Z. Yin, Y. Fang, Conv Former: A novel network
+combining convolution and self-attention for image quality assessment, Sensors 23
+(2023) 427–448.
+[35] Y. Zhang, X. Guo, M. Poggi, Z. Zhu, G. Huang, S. Mattoccia, CompletionFormer:
+Depth completion with convolutions and vision transformers, In: Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR),
+2023, pp. 18527-18536.
+[36] P. Yan, X. Liu, P. Zhang, H. Lu, Learning convolutional multi-level Transformers for
+image-based person re-identification, Vis. Intell. 1 (1) (2023) 1–12.
+[37] J. Yoo, T. Kim, S. Lee, S.H. Kim, H. Lee, T.H. Kim, Enriched CNN-transformer
+feature aggregation networks for super resolution, In: Proceedings of the IEEE/CVF
+Winter Conference on Applications of Computer Vision (WACV), 2023, pp. 4945-
+4954.
+[38] N. Zhang, F. Nex, G. Vosselman, N. Kerle, Lite-Mono: A lightweight CNN and
+transformer architecture for self-supervised monocular depth estimation, In:
+Proceedings of the IEEE/CVF Winter Conference on Applications of Computer
+Vision (WACV), 2023, pp. 18537-18546.
+[39] Z. Yang, J. Pan, J. Dai, Z. Sun, Y. Xiao, Self-supervised lightweight depth
+estimation in endoscopy combining CNN and Transformer, IEEE Trans. Med.
+Imaging 43 (5) (2024) 1934–1944.
+[40] J. Bae, K. Hwang, S. Im, A study on the generality of neural network structures for
+monocular depth estimation, IEEE Trans. Pattern Anal. Mach. Intell. 46 (4) (2024)
+2224–2238.
+[41] S. Shao, Z. Pei, W. Chen, R. Li, Z. Liu, Z. Li, URCDC-Depth: Uncertainty rectified
+cross-distillation with cut-flip for monocular depth estimation, IEEE Trans.
+Multimedia 26 (2024) 3341–3353.
+[42] Z. Zhang, R.K.Y. Chan, K.K.Y. Wong, Global Fuse-Depth: Fusing Transformers and
+CNNs for all-day self-supervised monocular depth estimation, Neurocomputing 569
+(2024) 127122.
+[43] M. Ramamonjisoa, M. Firman, J. Watson, V. Lepetit, D. Turmukhambetov, Single
+image depth prediction with Wavelet decomposition, In: Proceedings of, IEEE/CVF
+Conf. Comput. Vis. Pattern Recognit. (CVPR) (2021) 11089–11098.
+[44] P. Liu, Z. Zhang, Z. Meng, N. Gao, C. Wang, PDR-Net: Progressive depth
+reconstruction network for color guided depth map super-resolution,
+Neurocomputing 479 (2022) 75–88.
+[45] N. Zhang, F. Nex, G. Vosselman, N. Kerle, Lite-Mono: A lightweight CNN and
+Transformer architecture for self-supervised monocular depth estimation, In:
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2023, pp. 18537-18546.
+[46] M. Poggi, F. Aleotti, F. Tosi, S. Mattoccia, Towards real-time unsupervised
+monocular depth estimation on CPU. : Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst.
+(IROS) (2018) 5848–5854.
+[47] D. Fourure, R. Emonet, ´E. Fromont, D. Muselet, A. Tr´emeau, C. Wolf, Residual
+conv-deconv grid network for semantic segmentation, In: Proceedings of the 2018
+British Machine Vision Conference (BMVC), 2017, pp. 1-14.
+[48] J. Liu, L. Kong, J. Yang, W. Liu, Towards better data exploitation in self-supervised
+monocular depth estimation, IEEE Robot. Autom. Lett. 9 (1) (2024) 763–770.
+[49] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, B. Guo, Swin Transformer:
+Hierarchical vision Transformer using shifted windows, In: Proceedings of the IEEE
+International Conference on Computer Vision (ICCV), 2021, pp. 9992-10002.
+[50] A. Li, L. Zhang, Y. Liu, C. ZhuFeature modulation Transformer: Cross-refinement of
+global representation via high-frequency prior for image super-resolution, arXiv
+preprint, arXiv: 2308.050222023.
+[51] L. Zhu, X. Wang, Z. Ke, W. Zhang, R.W.H. Lau, BiFormer: Vision Transformer with
+bi-Level routing attention, In: Proceedings of, IEEE/CVF Conf. Comput. Vis. Pattern
+Recognit. (CVPR) (2023) 10323–10333.
+[52] S. Woo, J. Park, J. Lee, I.S. Korea, CBAM: Convolutional block attention module,
+In: Proceedings of the European Conference on Computer Vision (ECCV), 2018, pp.
+3-19.
+[53] V. Patil, C. Sakaridis, A. Liniger, L.V. Gool, P3Depth: Monocular depth estimation
+with a piecewise planarity prior, In: Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2022, pp. 1600-1611.
+[54] X. Qi, R. Liao, Z. Liu, R. Urtasun, J. Jia, GeoNet: Geometric neural network for joint
+depth and surface normal estimation, In: Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), 2018, pp. 283-291.
+[55] N. Silberman, D. Hoiem, D. Kohli, R. Fergus, Indoor segmentation and support
+inference from RGBD images, In: Proceedings of the European Conference on
+Computer Vision (ECCV), 2012, pp. 746-760.
+[56] A. Geiger, P. Lenz, C. Stiller, R. Urtasun, Vision meets robotics: the KITTI dataset,
+Int. J. Robot. Res. 32 (11) (2013) 1231–1237.
+[57] T. Koch, L. Liebel, F. Fraundorfer, M. K¨orner, Evaluation of CNN-based single-
+image depth estimation methods, In: Proceedings of the European Conference on
+Computer Vision (ECCV), 2018, pp. 331-348.
+Peng Liu received his B.S. degree in automation from Nan-
+chang Hangkong University, Nanchang, China, in 2005 and M.
+S. degree in control theory and control engineering from Dalian
+University of Technology, Dalian, China, in 2008, and he is
+currently pursuing his Ph.D. degree in mechanical engineering
+from Hebei University of Technology, Tianjin, China. In 2011,
+he joined School of Intelligence and Information Engineering,
+Tangshan University, Tangshan, China, where he is currently a
+lecturer. His current research interests include 3D reconstruc-
+tion, pattern recognition, deep learning, and computer vision.
+Zonghua Zhang is a full professor in the School of Mechanical
+Engineering, Hebei University of Technology, Tianjin, China.
+He received his Ph.D. degree from Tianjin University, Tianjin,
+China, in 2000. He worked in Ruhr University Bochum of
+Germany, Queen’s University of Canada, Heriot-Watt Univer-
+sity, University of Leeds, and University of Huddersfield of UK.
+His main research interests include 3D optical measurement,
+fringe projection profilometry, and phase measuring deflec-
+tometry. He has published more than 190 papers. From
+2016–2018, he was an EU Marie Curie Individual Fellow in
+University of Huddersfield of UK. He is an Associate Editor for
+Optics Express now.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+10 
+
+=== Page 11 ===
+Zhaozong Meng (M’14) received his B.S. and M.S. degrees in
+measurement and control technology and instrument from
+Sichuan University, Chengdu, China in 2006, and Beihang
+University, Beijing, China in 2009, respectively, and his Ph.D.
+degree in computer science from University of Huddersfield,
+West Yorkshire, UK, in 2014. From 2014–2016, he was a
+research associate with the University of Manchester, and from
+2016 to 2018, he was a research fellow with the University of
+Southampton. Since 2018, he has been a lecturer with School of
+Mechanical Engineering, Hebei University of Technology,
+Tianjin, China. Since 2020, he has been promoted an associate
+professor. His research interests include advanced sensor
+techniques,
+wearable
+devices
+and
+body
+area
+network,
+manufacturing intelligence, industrial IoT and cyber-physical systems.
+Nan Gao was born in Tianjin, China in 1982. He received the B.
+S., M.S., and Ph.D. degrees in biomedical engineering from
+Tianjin University, Tianjin, China, in 2006, 2008 and 2012.
+Since 2012, he has been a Lecturer and Associate Professor
+with the School of Mechanical Engineering, Hebei University of
+Technology. He is the author of more than 30 articles. His
+research interests include three-dimensional measurement of
+structured light projection, infrared absorption spectrum
+detection, machine vision and image processing.
+P. Liu et al.
+Neurocomputing 620 (2025) 129268 
+11 
+

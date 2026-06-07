@@ -1,89 +1,99 @@
 import argparse
-import random
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
+SPLIT_NAMES = {
+    'train': 'train',
+    'val':   'val',
+    'test':  'test',
+}
 
-def download_nyuv2(root="data/nyuv2", max_images=None, force=False, val_split=0.1, seed=42):
+
+def download_split(root, split_name, prefix, force):
+    import datasets
+
     root = Path(root)
-    image_dir = root / "image"
-    depth_dir = root / "depth"
-
-    if not force and (image_dir.exists() and len(list(image_dir.glob("*.jpg"))) > 0):
-        existing = len(list(image_dir.glob("*.jpg")))
-        print(f"NYUv2 already exists at {root} ({existing} images). Use --force to re-download.")
-        return
-
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        print("=" * 60)
-        print("Need 'datasets' library. Install with:")
-        print("  pip install datasets")
-        print("=" * 60)
-        return
-
+    image_dir = root / 'image'
+    depth_dir = root / 'depth'
     image_dir.mkdir(parents=True, exist_ok=True)
     depth_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Downloading NYUv2 from Hugging Face (jagennath-hari/nyuv2)…")
-    ds = load_dataset("jagennath-hari/nyuv2", split="train", streaming=True)
+    print(f"Downloading NYUv2 split='{split_name}' -> prefix '{prefix}' ...")
+    ds = datasets.load_dataset("jagennath-hari/nyuv2", split=split_name, streaming=True)
 
-    if max_images is not None:
-        ds = ds.take(max_images)
-
-    all_fnames = []
+    fnames = []
     for i, item in enumerate(ds):
-        img = item["rgb"]
-        depth = np.array(item["depth"])
+        fname = f"{prefix}_{i:04d}.jpg"
+        img_path = image_dir / fname
+        depth_path = depth_dir / fname.replace('.jpg', '.png')
 
-        fname = f"nyu_{i:04d}.jpg"
-        img.save(str(image_dir / fname), quality=95)
+        if not force and img_path.exists():
+            fnames.append(fname)
+            if (i + 1) % 100 == 0:
+                print(f"  [{i+1}] exists, skip")
+            continue
 
-        Image.fromarray(depth).save(str(depth_dir / fname.replace(".jpg", ".png")))
-        all_fnames.append(fname)
+        item["rgb"].save(str(img_path), quality=95)
+        Image.fromarray(np.array(item["depth"])).save(str(depth_path))
+        fnames.append(fname)
 
         if (i + 1) % 25 == 0:
             print(f"  [{i+1}] downloaded")
 
-    if not all_fnames:
-        print("No images downloaded.")
-        return
+    if not fnames:
+        print(f"  No images for split='{split_name}'.")
+        return []
 
-    rng = random.Random(seed)
-    rng.shuffle(all_fnames)
+    return fnames
 
-    split_idx = int(len(all_fnames) * (1 - val_split))
-    train_files = all_fnames[:split_idx]
-    val_files = all_fnames[split_idx:]
 
-    with open(root / "nyuv2_train.txt", "w") as f:
-        for name in train_files:
-            f.write(name + "\n")
-    with open(root / "nyuv2_val.txt", "w") as f:
-        for name in val_files:
-            f.write(name + "\n")
+def download_nyuv2(root="data/nyuv2", splits=None, force=False):
+    """
+    Download specific splits from HF nyuv2.
 
-    print(f"Done! {len(all_fnames)} images -> {root}")
-    print(f"  Images:     {image_dir}/")
-    print(f"  Depth maps: {depth_dir}/")
-    print(f"  Train:      nyuv2_train.txt ({len(train_files)})")
-    print(f"  Val:        nyuv2_val.txt ({len(val_files)})")
-    print()
+    Args:
+        splits: list of strings — 'train', 'val', 'test' (default: all three)
+        force: re-download even if file exists
+    """
+    if splits is None:
+        splits = ['train', 'val', 'test']
+
+    all_fnames = {}
+
+    for split_name in splits:
+        prefix = f"nyu_{split_name}"
+        fnames = download_split(root, split_name, prefix, force)
+        all_fnames[split_name] = fnames
+
+    root_path = Path(root)
+
+    for split_name in splits:
+        fnames = all_fnames.get(split_name, [])
+        if not fnames:
+            continue
+        txt_path = root_path / f'nyuv2_{split_name}.txt'
+        with open(txt_path, 'w') as f:
+            for name in fnames:
+                f.write(name + '\n')
+        print(f"  {txt_path.name}: {len(fnames)} images")
+
+    print(f"\nDone! Files in {root_path / 'image/'}")
     print("Train with:")
-    print(f"  python train.py --data-root {root} --backbone swin_tiny_patch4_window7_224 --epochs 30")
+    print(f"  python train.py --data-root {root}")
+    print("Evaluate with:")
+    print(f"  python evaluate.py --checkpoint <path> --split test")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=str, default="data/nyuv2")
-    parser.add_argument("--max-images", type=int, default=None,
-                        help="Limit to N images for quick test")
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--val-split", type=float, default=0.1,
-                        help="Fraction of images for validation (default: 0.1)")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--force", action="store_true",
+                        help="Re-download existing files")
+    parser.add_argument("--all", dest="splits", action="store_const",
+                        const=['train', 'val', 'test'],
+                        help="Download all three splits (train + val + test)")
+    parser.set_defaults(splits=['train', 'val', 'test'])
     args = parser.parse_args()
-    download_nyuv2(args.root, args.max_images, args.force, args.val_split, args.seed)
+    download_nyuv2(args.root, args.splits, args.force)
