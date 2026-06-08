@@ -1,4 +1,6 @@
 .idea
+examples
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -218,3 +220,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+/1-s2.0-S0925231224020393-main.pdf
+
+# Data
+data/
+*.h5
+*.hdf5
+*.tar
+*.gz
+*.zip
+*.pdf
+
+ex/
+
+# Outputs
+runs/
+outputs/
+checkpoints/
+tmp/
+*.pth
+*.pt
+
+# Weights from timm / HF
+.checkpoints/
+.cache/huggingface/
